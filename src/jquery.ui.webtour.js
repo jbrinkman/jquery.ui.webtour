@@ -7,7 +7,12 @@
 		prevButton: 'ui-webtour-previous',
 		nextButton: 'ui-webtour-next',
 		endButton: 'ui-webtour-end',
-		active: 'ui-webtour-active'
+		active: 'ui-webtour-active',
+		buttonSet: 'ui-webtour-buttonset',
+		button: 'ui-webtour-button',
+		arrowImage: 'ui-webtour-arrow',
+		primaryAction: 'ui-webtour-PrimaryAction',
+		secondaryAction: 'ui-webtour-SecondaryAction'
 	};
 
 	$.widget( "ui.webtour", {
@@ -16,22 +21,30 @@
 			prevButton: 'Previous',
 			nextButton: 'Next',
 			stopButton: 'End Tour',
-			arrowImage: '<div id="jTourArrow" class="arrow" />',
+			arrowImage: '<div />',
 			dialogOptions: {
 				autoOpen: false,
-				dialogClass: "dnnFormPopup",
 				resizable: false,
 				draggable: true,
-				buttons: {}
+				buttons: {},
+				close: function () {
+					$( '.ui-webtour-arrow' ).css( { left: '0', top: '0' } ).hide();
+					var widget = $( this ).data( "ui-webtour-instance" );
+					if ( widget ) {
+						widget._isOpen = false;
+					}
+				}
 			},
 			pageOptions: {
 				defaults: {
 					position: { my: 'center center', at: 'center center', of: window },
-					arrow: 'none',
+					arrow: null,
+					arrowPosition: null,
 					showPrevious: true,
 					showNext: true,
 					showEnd: true,
-					title: 'jQuery Web Tour'
+					title: 'jQuery Web Tour',
+					dialogOptions: {}
 				}
 			}
 
@@ -89,6 +102,8 @@
 							text: o.stopButton,
 							click: function () {
 								self.hide( $this );
+								self.pages.removeClass( webtourClasses.active );
+								self._trigger( "end" );
 							}
 						};
 					}
@@ -97,12 +112,32 @@
 						$.extend( dialogOpts, { buttons: optButtons } );
 					}
 
-					$this.dialog( dialogOpts );
+					$this.dialog( $.extend({}, dialogOpts, pageData.dialogOptions) )
+						.dialog( 'widget' )
+						.find( '.ui-dialog-buttonset' )
+						.addClass( webtourClasses.buttonSet )
+						.find( '.ui-button' )
+						.addClass( webtourClasses.button )
+						.not( ':contains(' + o.stopButton + ')' )
+						.addClass( webtourClasses.primaryAction );
+					$this.dialog( 'widget' )
+						.find( '.ui-button:contains(' + o.stopButton + ')' )
+						.addClass( webtourClasses.secondaryAction);
 					
+					if ( pageData.arrow && pageData.arrowPosition ) {
+						$( o.arrowImage )
+							.appendTo( 'body' )
+							.addClass( pageData.arrow )
+							.addClass( webtourClasses.arrowImage )
+							.addClass( webtourClasses.arrowImage + '-' + self.pages.length )
+							.hide();
+					}
+
 					self.pages = self.pages.add( $this.addClass( webtourClasses.page ) );
 
 				} );
 
+			self._isOpen = false;
 		},
 
 		_init: function () {
@@ -116,9 +151,12 @@
 		},
 
 		_getActivePage: function ( $page ) {
-			var $activePage = $page || this.pages.filter( '.' + webtourClasses.active ).first();
-			if (!$activePage.length) {
-				$activePage = this.pages.filter( '.' + webtourClasses.firstPage ).first()
+			var $activePage = $page || this.pages.filter( '.' + webtourClasses.active ).first(),
+			ui = this.getUI( null );
+			if ( !$activePage.length ) {
+				if ( this._trigger( "loadActivePage", null, ui ) ) {
+					$activePage = ui.savedPage || this.pages.filter( '.' + webtourClasses.firstPage ).first();
+				}
 			}
 			return $activePage;
 		},
@@ -129,33 +167,56 @@
 
 		hide: function ( $page ) {
 			var $activePage = this._getActivePage( $page ),
-			ui = this._ui( $activePage, this.pages.index($activePage) );
-			this._trigger( "beforeHide", null, ui );
+			ui = this.getUI( $activePage, this.pages.index( $activePage ) );
+			if ( false === this._trigger( "beforeHide", null, ui ) ) {
+				return false;
+			}
 			if ( $activePage ) {
 				$activePage.dialog( 'close' );
 			}
-			this._trigger( "Hide", null, ui);
+			this._isOpen = false;
+			this._trigger( "hide", null, ui );
+		},
+
+		isOpen: function () {
+			return this._isOpen;
 		},
 
 		show: function ( $page ) {
 
 			var $activePage = this._getActivePage( $page ),
             pageData = this._getPageData( $activePage ),
-			ui = this._ui( $activePage, this.pages.index($activePage) ) ;
+			ui = this.getUI( $activePage, this.pages.index( $activePage ) ),
+			arrowPosition = pageData.arrowPosition,
+			$dialog;
 
-			this._trigger( "beforeShow", null, ui);
-			if (false === self._trigger('beforeClose', event)) {
+			if ( false === this._trigger( "beforeShow", null, ui ) ) {
 				return;
 			}
-			this.hide();
+			if ( this._isOpen && this.hide() === false ) {
+				return;
+			};
 
-			$activePage
-                .dialog( 'open' )
+			$dialog = $activePage
+                .data( 'ui-webtour-instance', this )
+				.dialog( 'open' )
                 .dialog( 'widget' )
-                .position( pageData.position );
+				.position( pageData.position );
+
+			if ( pageData.arrow && pageData.arrowPosition ) {
+				if ( pageData.arrowPosition.of === 'dialog' ) {
+					arrowPosition.of = $dialog;
+				}
+				$( '.' + webtourClasses.arrowImage + '-' + this.pages.index( $activePage ) )
+					.show()
+					.position( arrowPosition )
+					.css({zIndex: parseInt( $dialog.css('zIndex') ) + 10}); 
+				}
 
 			this.pages.removeClass( webtourClasses.active );
 			$activePage.addClass( webtourClasses.active );
+			this._isOpen = true;
+			this._trigger( "saveActivePage", null, ui )
 			this._trigger( "show", null, ui );
 		},
 
@@ -164,17 +225,19 @@
 
 		},
 
-		_ui: function( page ) {
+		getUI: function ( page ) {
+			page = ( typeof page === "string" ) ? $( page ) : page;
+
 			return {
 				page: page,
-				index: this.pages.index( page )
+				index: page ? this.pages.index( page ) : null
 			};
 		}
 
 	} );
 
 	$.extend( $.ui.webtour, {
-		version: "0.9.0"
+		version: "1.0.0"
 	} );
 
 } )( jQuery );
