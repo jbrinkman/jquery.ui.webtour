@@ -41,14 +41,14 @@
 			prevButton: 'Previous',
 			nextButton: 'Next',
 			stopButton: 'End Tour',
-			arrowImage: '<div />',
+			arrowTemplate: '<div />',
 			dialogOptions: {
 				autoOpen: false,
 				resizable: false,
 				draggable: true,
 				buttons: {},
 				close: function () {
-					$( '.ui-webtour-arrow' ).css( { left: '0', top: '0' } ).hide();
+					$( ".ui-webtour-arrow" ).css( { left: '0', top: '0' } ).hide();
 					var widget = $( this ).data( "ui-webtour-instance" );
 					if ( widget ) {
 						widget._isOpen = false;
@@ -145,7 +145,7 @@
 						.addClass( webtourClasses.secondaryAction);
 					
 					if ( pageData.arrow && pageData.arrowPosition ) {
-						$( o.arrowImage )
+						$( o.arrowTemplate )
 							.appendTo( 'body' )
 							.addClass( pageData.arrow )
 							.addClass( webtourClasses.arrowImage )
